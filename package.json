@@ -1,0 +1,29 @@
+{
+  "name": "dashhouse",
+  "version": "1.0.0",
+  "description": "Housing market dashboard for South Carolina and Charleston area using US Census data",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.7",
+    "axios": "^1.6.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^4.1.0",
+    "postcss": "^8.5.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "type": "module"
+}
