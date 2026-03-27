@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { 
-  ResidentialConstructionSeries, 
-  CategoryCode, 
+import {
+  ResidentialConstructionSeries,
+  CategoryCode,
   DataTypeCode,
-  RegionCode 
+  RegionCode
 } from '../../../types/census/economicIndicators/residentialConstruction';
 import { ChartData, ChartDataset } from '../../../components/LineChart';
+import { REGION_DISPLAY_NAMES } from '../../../types/census/regions';
 
 export interface ResConstructionTimeSeriesDataset extends ChartDataset {
   regionCode: RegionCode;
@@ -37,17 +38,8 @@ export function useTimeSeriesData(
         return metric || 0;
       });
 
-      const regionNames = {
-        [RegionCode.US]: 'United States',
-        [RegionCode.MW]: 'Midwest', 
-        [RegionCode.NE]: 'Northeast',
-        [RegionCode.NO]: 'Northeast', // Alternative code
-        [RegionCode.SO]: 'South',
-        [RegionCode.WE]: 'West'
-      };
-
       return {
-        label: regionNames[regionCode],
+        label: REGION_DISPLAY_NAMES[regionCode] || regionCode,
         data: regionData,
         regionCode
       };

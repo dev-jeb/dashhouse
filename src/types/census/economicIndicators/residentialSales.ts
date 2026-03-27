@@ -73,9 +73,9 @@ export function parseResidentialSalesData(data: any[][]): ResidentialSalesSeries
 
   // Initialize empty metrics for a region
   const createEmptyMetrics = (): Record<CategoryCode, Record<DataTypeCode, number>> => {
-    const result: any = {};
+    const result = {} as Record<CategoryCode, Record<DataTypeCode, number>>;
     Object.values(CategoryCode).forEach(category => {
-      result[category] = {};
+      result[category] = {} as Record<DataTypeCode, number>;
       Object.values(DataTypeCode).forEach(dataType => {
         result[category][dataType] = 0;
       });

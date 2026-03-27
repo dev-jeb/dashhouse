@@ -1,16 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
+import {
+  LineChart as RechartsLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Brush,
+} from 'recharts';
+import { REGION_COLORS } from '../types/census/regions';
+import { ChartData, ChartDataset } from '../types/common';
 
-// Generic interfaces for chart data
-export interface ChartDataset {
-  label: string;
-  data: number[];
-  regionCode?: string;
-}
-
-export interface ChartData {
-  labels: string[];
-  datasets: ChartDataset[];
-}
+export type { ChartData, ChartDataset };
 
 interface LineChartProps {
   data: ChartData;
@@ -20,48 +23,94 @@ interface LineChartProps {
   className?: string;
 }
 
+// Default color palette for non-region datasets
+const DEFAULT_COLORS = [
+  '#10b981', // emerald
+  '#3b82f6', // blue
+  '#f59e0b', // amber
+  '#ef4444', // red
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#14b8a6', // teal
+];
+
+function getColor(label: string, index: number): string {
+  return (REGION_COLORS as Record<string, string>)[label] || DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+}
+
+/** Format a date label for the X axis — show readable short dates */
+function formatXLabel(label: string): string {
+  // Quarterly: "2024-Q3" → "Q3 '24"
+  const qMatch = label.match(/^(\d{4})-Q(\d)$/);
+  if (qMatch) return `Q${qMatch[2]} '${qMatch[1].slice(2)}`;
+
+  // Monthly: "2024-06" → "Jun '24"
+  const mMatch = label.match(/^(\d{4})-(\d{2})$/);
+  if (mMatch) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(mMatch[2]) - 1]} '${mMatch[1].slice(2)}`;
+  }
+
+  // Full date: "2024-06-15" → "Jun '24"
+  const dMatch = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dMatch) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[parseInt(dMatch[2]) - 1]} '${dMatch[1].slice(2)}`;
+  }
+
+  return label;
+}
+
+/** Custom tooltip styled to match the forest theme */
+function CustomTooltip({ active, payload, label, unit }: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: string;
+  unit: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  return (
+    <div className="bg-forest-900 border border-forest-600 rounded-lg p-3 shadow-xl text-sm">
+      <div className="text-forest-300 mb-1">{label}</div>
+      {payload.map((entry, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+          <span className="text-forest-200">{entry.name}:</span>
+          <span className="text-forest-100 font-semibold">
+            {typeof entry.value === 'number' ? entry.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : entry.value}{unit}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const LineChart: React.FC<LineChartProps> = ({
   data,
   title,
-  yAxisLabel = 'Value (%)',
+  yAxisLabel = 'Value',
   unit = '%',
-  className = ''
+  className = '',
 }) => {
-  // Track which datasets are visible
-  const [visibleDatasets, setVisibleDatasets] = useState<Record<string, boolean>>(
-    Object.fromEntries(data.datasets.map(dataset => [dataset.label, true]))
-  );
+  // Transform ChartData into Recharts format: array of { label, dataset1: val, dataset2: val, ... }
+  const chartData = useMemo(() => {
+    if (!data.labels.length) return [];
 
-  // Track hover state for tooltip
-  const [hoveredPoint, setHoveredPoint] = useState<{
-    datasetIndex: number;
-    pointIndex: number;
-    x: number;
-    y: number;
-  } | null>(null);
+    return data.labels.map((label, i) => {
+      const point: Record<string, string | number> = { label };
+      data.datasets.forEach(ds => {
+        point[ds.label] = ds.data[i] ?? null;
+      });
+      return point;
+    });
+  }, [data]);
 
-  // Ref for scroll container and SVG element
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const hasAutoScrolled = useRef(false);
-
-  // Zoom state - controls how many pixels per data point
-  const [zoomLevel, setZoomLevel] = useState(80); // Default 80px per data point
-
-  const toggleDataset = (label: string) => {
-    setVisibleDatasets(prev => ({
-      ...prev,
-      [label]: !prev[label]
-    }));
-  };
-
-  // Auto-scroll to right only on initial mount
-  useEffect(() => {
-    if (scrollContainerRef.current && !hasAutoScrolled.current) {
-      scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth - scrollContainerRef.current.clientWidth;
-      hasAutoScrolled.current = true;
-    }
-  }, [data.labels.length]); // Re-run when data changes
+  // For the brush, default to showing the last 2 years of data
+  const brushStartIndex = useMemo(() => {
+    if (chartData.length <= 48) return 0;
+    return chartData.length - 48; // ~4 years for monthly, ~2 years for weekly
+  }, [chartData.length]);
 
   if (!data.labels.length || !data.datasets.length) {
     return (
@@ -72,309 +121,78 @@ const LineChart: React.FC<LineChartProps> = ({
     );
   }
 
-
-  // Responsive width calculation based on zoom level
-  const width = Math.max(800, data.labels.length * zoomLevel); // Minimum 800px, or zoomLevel px per label
-  const height = 350;
-  const margin = { top: 20, right: 40, bottom: 80, left: 100 }; // Increased left margin for better spacing
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
-
-  // Calculate scales based on ALL data (not just visible) to maintain consistent grid
-  const allValues = data.datasets.flatMap(d => d.data);
-  const minY = allValues.length > 0 ? Math.min(...allValues) : 0;
-  const maxY = allValues.length > 0 ? Math.max(...allValues) : 1;
-  const yRange = maxY - minY;
-  const yPadding = yRange * 0.1;
-  const yMin = Math.max(0, minY - yPadding); // Don't go below 0 for percentages
-  const yMax = maxY + yPadding;
-
-  const xScale = (index: number) => (index / (data.labels.length - 1)) * chartWidth;
-  const yScale = (value: number) => chartHeight - ((value - yMin) / (yMax - yMin)) * chartHeight;
-
-  // Region colors
-  const regionColors = {
-    'United States': '#10b981', // emerald-500
-    'Midwest': '#f59e0b',       // amber-500
-    'Northeast': '#3b82f6',     // blue-500
-    'South': '#ef4444',         // red-500
-    'West': '#8b5cf6'           // violet-500
-  };
-
   return (
     <div className={`bg-forest-800 p-6 rounded-lg border border-forest-600 shadow-lg ${className}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-forest-400 flex-1 text-center">{title}</h3>
+      <h3 className="text-lg font-semibold text-forest-400 text-center mb-4">{title}</h3>
 
-        {/* Zoom Controls */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-forest-300">Zoom:</span>
-          <button
-            onClick={() => setZoomLevel(prev => Math.min(prev + 20, 120))}
-            className="px-2 py-1 bg-forest-700 hover:bg-forest-600 text-forest-200 rounded text-sm transition-colors"
-            title="Zoom In"
-          >
-            +
-          </button>
-          <span className="text-xs text-forest-400 min-w-[3rem] text-center">
-            {Math.round((80 / zoomLevel) * 100)}%
-          </span>
-          <button
-            onClick={() => setZoomLevel(prev => Math.max(prev - 20, 20))}
-            className="px-2 py-1 bg-forest-700 hover:bg-forest-600 text-forest-200 rounded text-sm transition-colors"
-            title="Zoom Out"
-          >
-            -
-          </button>
-        </div>
-      </div>
+      <ResponsiveContainer width="100%" height={400}>
+        <RechartsLineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1a2e1e" />
 
-      <div className="relative">
-        <div className="flex">
-          {/* Sticky Y-axis section */}
-          <div className="flex-shrink-0 relative">
-            {/* Y-axis label - positioned well to the left of the line */}
-            <div className="absolute left-4 top-[calc(50%+70px)] -translate-y-1/2 -rotate-90 text-sm text-forest-300 z-10 pointer-events-none whitespace-nowrap origin-left">
-              {yAxisLabel}
-            </div>
+          <XAxis
+            dataKey="label"
+            tickFormatter={formatXLabel}
+            stroke="#6b7280"
+            tick={{ fill: '#9ca3af', fontSize: 12 }}
+            interval="preserveStartEnd"
+            minTickGap={40}
+          />
 
-            {/* Sticky Y-axis SVG */}
-            <svg width={margin.left} height={height} className="text-forest-400">
-              <g transform={`translate(${margin.left}, ${margin.top})`}>
-                {/* Grid lines - use nice round numbers */}
-                {(() => {
-                  const range = yMax - yMin;
-                  const stepSize = range / 5;
-                  const niceStep = Math.ceil(stepSize * 10) / 10;
-
-                  const gridValues = [];
-                  const startValue = Math.ceil(yMin / niceStep) * niceStep;
-
-                  for (let value = startValue; value <= yMax; value += niceStep) {
-                    gridValues.push(value);
-                  }
-
-                  return gridValues.map((value, index) => {
-                    const y = yScale(value);
-
-                    return (
-                      <g key={index}>
-                        <text
-                          x={-30}
-                          y={y + 4}
-                          fontSize="12"
-                          fill="#9ca3af"
-                          textAnchor="end"
-                        >
-                          {value.toFixed(1)}
-                        </text>
-                      </g>
-                    );
-                  });
-                })()}
-
-                {/* Y-axis line */}
-                <line x1={0} y1={0} x2={0} y2={chartHeight} stroke="#6b7280" strokeWidth={1} />
-              </g>
-            </svg>
-          </div>
-
-          {/* Scrollable chart area */}
-          <div className="flex-1 overflow-x-auto" ref={scrollContainerRef}>
-            <svg ref={svgRef} width={width - margin.left} height={height} className="text-forest-200">
-              <g transform={`translate(0, ${margin.top})`}>
-                {/* Horizontal grid lines only */}
-                {(() => {
-                  const range = yMax - yMin;
-                  const stepSize = range / 5;
-                  const niceStep = Math.ceil(stepSize * 10) / 10;
-
-                  const gridValues = [];
-                  const startValue = Math.ceil(yMin / niceStep) * niceStep;
-
-                  for (let value = startValue; value <= yMax; value += niceStep) {
-                    gridValues.push(value);
-                  }
-
-                  return gridValues.map((value, index) => {
-                    const y = yScale(value);
-
-                    return (
-                      <line
-                        key={index}
-                        x1={0}
-                        y1={y}
-                        x2={chartWidth}
-                        y2={y}
-                        stroke="#374151"
-                        strokeWidth={0.5}
-                        strokeDasharray="2,2"
-                      />
-                    );
-                  });
-                })()}
-
-                {/* X-axis labels - rotated */}
-                {data.labels.map((label, index) => (
-                  <text
-                    key={index}
-                    x={xScale(index)}
-                    y={chartHeight + 25}
-                    fontSize="11"
-                    fill="#9ca3af"
-                    textAnchor="start"
-                    transform={`rotate(45, ${xScale(index)}, ${chartHeight + 25})`}
-                  >
-                    {label}
-                  </text>
-                ))}
-
-                {/* Lines - only render visible datasets */}
-                {data.datasets.map((dataset, datasetIndex) => {
-                  if (!visibleDatasets[dataset.label]) return null;
-
-                  const pathData = dataset.data.map((value, index) =>
-                    `${index === 0 ? 'M' : 'L'} ${xScale(index)} ${yScale(value)}`
-                  ).join(' ');
-
-                  return (
-                    <g key={datasetIndex}>
-                      <path
-                        d={pathData}
-                        fill="none"
-                        stroke={regionColors[dataset.label as keyof typeof regionColors] || '#10b981'}
-                        strokeWidth={2}
-                        className="hover:stroke-width-3 transition-all duration-200"
-                      />
-                      {/* Data points */}
-                      {dataset.data.map((value, index) => {
-                        const cx = xScale(index);
-                        const cy = yScale(value);
-                        const isHovered = hoveredPoint?.datasetIndex === datasetIndex && hoveredPoint?.pointIndex === index;
-
-                        return (
-                          <g key={index}>
-                            {/* Add a small crosshair to show exact center position */}
-                            {isHovered && (
-                              <>
-                                <line
-                                  x1={cx - 8}
-                                  y1={cy}
-                                  x2={cx + 8}
-                                  y2={cy}
-                                  stroke="#ffffff"
-                                  strokeWidth={1}
-                                  opacity={0.7}
-                                />
-                                <line
-                                  x1={cx}
-                                  y1={cy - 8}
-                                  x2={cx}
-                                  y2={cy + 8}
-                                  stroke="#ffffff"
-                                  strokeWidth={1}
-                                  opacity={0.7}
-                                />
-                              </>
-                            )}
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={isHovered ? 5 : 3}
-                              fill={regionColors[dataset.label as keyof typeof regionColors] || '#10b981'}
-                              stroke={isHovered ? '#ffffff' : 'none'}
-                              strokeWidth={isHovered ? 2 : 0}
-                              className="transition-all duration-200 cursor-pointer"
-                              onMouseEnter={(e) => {
-                                const svgRect = svgRef.current?.getBoundingClientRect();
-                                const pointRect = e.currentTarget.getBoundingClientRect();
-                                if (svgRect) {
-                                  setHoveredPoint({
-                                    datasetIndex,
-                                    pointIndex: index,
-                                    x: pointRect.left + pointRect.width / 2,
-                                    y: pointRect.top + pointRect.height / 2
-                                  });
-                                }
-                              }}
-                              onMouseLeave={() => setHoveredPoint(null)}
-                            />
-                          </g>
-                        );
-                      })}
-                    </g>
-                  );
-                })}
-
-              </g>
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Interactive Legend */}
-      <div className="flex flex-wrap gap-4 mt-4">
-        {data.datasets.map((dataset, index) => {
-          const isVisible = visibleDatasets[dataset.label];
-          return (
-            <div
-              key={index}
-              className="flex items-center gap-2 cursor-pointer hover:bg-forest-700 px-2 py-1 rounded transition-colors duration-200"
-              onClick={() => toggleDataset(dataset.label)}
-            >
-              <div
-                className={`w-3 h-3 rounded-full transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-30'
-                  }`}
-                style={{ backgroundColor: regionColors[dataset.label as keyof typeof regionColors] || '#10b981' }}
-              />
-              <span className={`text-sm transition-colors duration-200 ${isVisible ? 'text-forest-200' : 'text-forest-400 line-through'
-                }`}>
-                {dataset.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Hover Tooltip */}
-      {hoveredPoint && (() => {
-        // Smart positioning to avoid screen edges
-        const tooltipWidth = 180; // Approximate tooltip width
-        const tooltipHeight = 70; // Approximate tooltip height
-        const offset = 15; // Distance from point
-
-        // Check if tooltip would go off right edge
-        const wouldOverflowRight = hoveredPoint.x + tooltipWidth + offset > window.innerWidth;
-        const leftPosition = wouldOverflowRight
-          ? hoveredPoint.x - tooltipWidth - offset
-          : hoveredPoint.x + offset;
-
-        // Check if tooltip would go off top edge
-        const wouldOverflowTop = hoveredPoint.y - tooltipHeight - offset < 0;
-        const topPosition = wouldOverflowTop
-          ? hoveredPoint.y + offset
-          : hoveredPoint.y - tooltipHeight - offset;
-
-        return (
-          <div
-            className="fixed bg-forest-900 border border-forest-600 rounded-lg p-3 text-sm shadow-xl z-50 pointer-events-none"
-            style={{
-              left: leftPosition,
-              top: topPosition,
+          <YAxis
+            stroke="#6b7280"
+            tick={{ fill: '#9ca3af', fontSize: 12 }}
+            label={{
+              value: yAxisLabel,
+              angle: -90,
+              position: 'insideLeft',
+              offset: 0,
+              style: { fill: '#9ca3af', fontSize: 13 },
             }}
+            tickFormatter={(val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          />
+
+          <Tooltip content={<CustomTooltip unit={unit} />} />
+
+          <Legend
+            wrapperStyle={{ paddingTop: 10 }}
+            formatter={(value: string) => <span style={{ color: '#a8d1b5' }}>{value}</span>}
+          />
+
+          {data.datasets.map((ds, i) => (
+            <Line
+              key={ds.label}
+              type="monotone"
+              dataKey={ds.label}
+              stroke={getColor(ds.label, i)}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+              connectNulls
+            />
+          ))}
+
+          {/* Date range slider at the bottom */}
+          <Brush
+            dataKey="label"
+            height={30}
+            stroke="#4a7c5c"
+            fill="#0a130c"
+            tickFormatter={formatXLabel}
+            startIndex={brushStartIndex}
+            travellerWidth={10}
           >
-            <div className="text-accent-400 font-semibold mb-1">
-              {data.datasets[hoveredPoint.datasetIndex].label}
-            </div>
-            <div className="text-forest-200">
-              <span className="text-forest-300">Time:</span> {data.labels[hoveredPoint.pointIndex]}
-            </div>
-            <div className="text-forest-200">
-              <span className="text-forest-300">Value:</span> {data.datasets[hoveredPoint.datasetIndex].data[hoveredPoint.pointIndex]}{unit}
-            </div>
-          </div>
-        );
-      })()}
+            <RechartsLineChart>
+              <Line
+                type="monotone"
+                dataKey={data.datasets[0]?.label}
+                stroke="#4a7c5c"
+                dot={false}
+                strokeWidth={1}
+              />
+            </RechartsLineChart>
+          </Brush>
+        </RechartsLineChart>
+      </ResponsiveContainer>
     </div>
   );
 };

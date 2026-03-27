@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { 
-  HousingVacancyAndOwnershipSeries, 
-  DataTypeCode, 
-  RegionCode 
+import {
+  HousingVacancyAndOwnershipSeries,
+  DataTypeCode,
+  RegionCode
 } from '../../../types/census/economicIndicators/housingVacancyAndOwnership';
 import { ChartData, ChartDataset } from '../../../components/LineChart';
+import { REGION_DISPLAY_NAMES } from '../../../types/census/regions';
 
 export interface TimeSeriesDataset extends ChartDataset {
   regionCode: RegionCode;
@@ -34,16 +35,8 @@ export function useTimeSeriesData(
         step.metrics[regionCode][metric] || 0
       );
 
-      const regionNames = {
-        [RegionCode.US]: 'United States',
-        [RegionCode.MW]: 'Midwest', 
-        [RegionCode.NE]: 'Northeast',
-        [RegionCode.SO]: 'South',
-        [RegionCode.WE]: 'West'
-      };
-
       return {
-        label: regionNames[regionCode],
+        label: REGION_DISPLAY_NAMES[regionCode] || regionCode,
         data: regionData,
         regionCode
       };
