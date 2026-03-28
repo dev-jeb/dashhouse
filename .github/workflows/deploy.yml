@@ -1,0 +1,83 @@
+name: Deploy Frontend
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tailwind.config.js'
+      - 'tsconfig.json'
+  workflow_dispatch:
+
+jobs:
+  deploy-frontend:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "infrastructure/pulumi/pyproject.toml"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Assume AWS role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::682033488592:role/gh-action-role
+          aws-region: us-east-1
+
+      - uses: pulumi/auth-actions@v1
+        with:
+          organization: Johnyb0223
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:Johnyb0223
+
+      - name: Get Lambda Function URL
+        id: get-url
+        working-directory: infrastructure/pulumi
+        run: |
+          uv sync --locked --all-extras
+          echo "function_url=$(pulumi stack output function_url --stack johnyb0223/prod)" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend
+        run: |
+          npm ci
+          VITE_FRED_PROXY_URL=${{ steps.get-url.outputs.function_url }} npm run build
+
+      - name: Install infra dependencies
+        run: uv sync --locked --all-extras
+        working-directory: infrastructure/pulumi
+
+      - name: Sync to S3 via Pulumi
+        uses: pulumi/actions@v6
+        with:
+          command: up
+          stack-name: johnyb0223/prod
+          work-dir: infrastructure/pulumi
+
+      - name: Invalidate CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(cd infrastructure/pulumi && pulumi stack output cloudfront_distribution_id --stack johnyb0223/prod)
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/index.html"

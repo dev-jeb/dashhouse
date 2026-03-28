@@ -4,6 +4,7 @@ from pathlib import Path
 import pulumi
 from pulumi_aws import ssm
 
+#
 credentials_files = Path(__file__).parent.glob("params/**/*.json")
 
 for credentials_file in credentials_files:
