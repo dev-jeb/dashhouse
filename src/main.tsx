@@ -4,7 +4,7 @@ import App from './App.tsx'
 import './index.css'
 
 const root = document.getElementById('root');
-
+//deploy
 if (root) {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
