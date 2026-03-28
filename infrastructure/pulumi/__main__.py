@@ -128,6 +128,16 @@ function_url = lambda_.FunctionUrl(
 
 pulumi.export("function_url", function_url.function_url)
 
+# Store function URL in Parameter Store so the deploy workflow can read it
+aws.ssm.Parameter(
+    f"{project_name}-function-url-param",
+    type="String",
+    name=f"/dashhouse_config/{environment}/function_url",
+    value=function_url.function_url,
+    overwrite=True,
+    tags=tagged(f"{project_name}-function-url-param", "config"),
+)
+
 
 DOMAIN_NAME = "dashhouse.dev-jeb.com"
 

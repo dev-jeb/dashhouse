@@ -54,12 +54,10 @@ jobs:
           requested-token-type: urn:pulumi:token-type:access_token:personal
           scope: user:Johnyb0223
 
-      - name: Get Lambda Function URL
+      - name: Get Lambda Function URL from Parameter Store
         id: get-url
-        working-directory: infrastructure/pulumi
         run: |
-          uv sync --locked --all-extras
-          echo "function_url=$(pulumi stack output function_url --stack johnyb0223/prod)" >> "$GITHUB_OUTPUT"
+          echo "function_url=$(aws ssm get-parameter --name /dashhouse_config/prod/function_url --query Parameter.Value --output text)" >> "$GITHUB_OUTPUT"
 
       - name: Build frontend
         run: |
