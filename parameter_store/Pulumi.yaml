@@ -1,0 +1,6 @@
+name: dashhouse-parameter-store
+runtime:
+  name: python
+  options:
+    virtualenv: .venv
+description: AWS SSM Parameter Store for Dashhouse

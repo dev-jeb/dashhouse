@@ -17,7 +17,8 @@ Requires a free FRED API key from https://fred.stlouisfed.org (set `VITE_FRED_AP
 
 - React 18, TypeScript, Vite
 - Tailwind CSS v4 (dark forest-green theme defined in `src/index.css`)
-- Custom SVG line charts (no charting library)
+- Recharts for data visualization
+- Tremor for card components
 
 ## Architecture
 
@@ -51,8 +52,8 @@ Data Sources → Contexts (fetch + parse) → Hooks (transform) → Pages + Comp
 - **Forces** — 3-tier explainer: Fed → Rates → Supply/Demand/Prices
 
 ### Components (src/components/)
-- **LineChart** — Custom SVG chart with zoom, scroll, legend toggle, tooltips
-- **StatCard** — Metric card with trend arrows, interpretation text, two-part hover tooltip, comparison values
+- **LineChart** — Recharts-based with brush slider, responsive, auto-formatted date axis
+- **StatCard** — Tremor Card with trend period toggles (3mo/6mo/YoY), info tooltip popover
 - **PaymentCalculator** — Interactive mortgage payment calculator with rate scenarios
 - **NavTabs** — Tab navigation (Briefing, Charleston, National, Forces)
 - **DataFreshness** — Small "last updated" badge
@@ -70,7 +71,7 @@ Series are registered in `src/config/fred.ts`. Key series:
 | CSUSHPISA | Case-Shiller Home Price Index | Monthly |
 | ACTLISCOU45019 | Active listings, Charleston County | Monthly |
 | MEDDAYONMAR16700 | Days on market, Charleston MSA | Monthly |
-| ATNHPIUS16700A | House price index, Charleston MSA | Quarterly |
+| ATNHPIUS16700Q | House price index, Charleston MSA | Quarterly |
 | CPIAUCSL | CPI (inflation) | Monthly |
 | UMCSENT | Consumer sentiment | Monthly |
 | UNRATE | Unemployment rate | Monthly |
@@ -94,3 +95,12 @@ Endpoints from `https://api.census.gov/data/timeseries/eits/`:
 ## Region Codes
 
 The Census API uses `NE` for Northeast in some endpoints, `NO` in others. The shared mapping in `src/types/census/regions.ts` handles both.
+
+## AWS Infrastructure
+
+- **URL:** https://dashhouse.dev-jeb.com
+- **Architecture:** S3 + CloudFront (static site) + Lambda Function URL (FRED API proxy)
+- **IaC:** Pulumi (Python), follows same patterns as the finances repo
+- `parameter_store/` — SSM SecureString params (FRED API key)
+- `lambda/` — Python Lambda that proxies FRED calls (keeps API key server-side)
+- `infrastructure/pulumi/` — S3, CloudFront, ECR, Lambda, Route53, ACM

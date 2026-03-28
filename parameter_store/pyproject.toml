@@ -1,0 +1,10 @@
+[project]
+name = "dashhouse-parameter-store-pulumi"
+version = "0.1.0"
+description = "Pulumi infrastructure for Dashhouse parameter store"
+requires-python = ">=3.13"
+dependencies = [
+    "pip",
+    "pulumi",
+    "pulumi-aws",
+]

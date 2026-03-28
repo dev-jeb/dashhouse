@@ -1,5 +1,11 @@
 **/.env
 **/.env.*
+!**/.env.example
 **/node_modules
 **/.DS_Store
 **/.vscode
+**/.venv
+**/uv.lock
+**/__pycache__
+parameter_store/params/**/*.json
+dist/
