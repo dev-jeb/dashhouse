@@ -1,11 +1,9 @@
+// Dev: use Vite proxy with local API key
+// Prod: use Lambda proxy (no API key in frontend)
 const FRED_API_KEY = import.meta.env.VITE_FRED_API_KEY as string | undefined;
+const FRED_PROXY_URL = import.meta.env.VITE_FRED_PROXY_URL as string | undefined;
 
-// Use Vite proxy in dev to avoid CORS, direct URL in production
-const FRED_BASE_URL = import.meta.env.DEV
-  ? '/api/fred/fred/series/observations'
-  : 'https://api.stlouisfed.org/fred/series/observations';
-
-if (!FRED_API_KEY) {
+if (import.meta.env.DEV && !FRED_API_KEY) {
   console.warn('[FRED] No API key found. Set VITE_FRED_API_KEY in your .env file and restart the dev server.');
 }
 
@@ -110,14 +108,24 @@ export const FRED_SERIES: Record<string, FredSeriesMeta> = {
 };
 
 export function buildFredUrl(seriesId: string, observationStart?: string): string {
-  const params = new URLSearchParams({
-    series_id: seriesId,
-    api_key: FRED_API_KEY,
-    file_type: 'json',
-    sort_order: 'asc',
-  });
+  if (import.meta.env.DEV) {
+    // Dev mode: use Vite proxy with API key
+    const params = new URLSearchParams({
+      series_id: seriesId,
+      api_key: FRED_API_KEY || '',
+      file_type: 'json',
+      sort_order: 'asc',
+    });
+    if (observationStart) {
+      params.set('observation_start', observationStart);
+    }
+    return `/api/fred/fred/series/observations?${params.toString()}`;
+  }
+
+  // Production: use Lambda proxy (API key stays server-side)
+  const params = new URLSearchParams({ series_id: seriesId });
   if (observationStart) {
     params.set('observation_start', observationStart);
   }
-  return `${FRED_BASE_URL}?${params.toString()}`;
+  return `${FRED_PROXY_URL}?${params.toString()}`;
 }

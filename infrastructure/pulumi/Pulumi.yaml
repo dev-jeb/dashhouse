@@ -1,0 +1,6 @@
+name: dashhouse-infrastructure
+runtime:
+  name: python
+  options:
+    virtualenv: .venv
+description: AWS infrastructure for Dashhouse - S3, CloudFront, Lambda FRED proxy

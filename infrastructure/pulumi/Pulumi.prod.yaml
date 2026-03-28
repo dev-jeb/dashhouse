@@ -1,0 +1,3 @@
+config:
+  dashhouse-infrastructure:environment: "prod"
+  aws:region: "us-east-1"
